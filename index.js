@@ -70,24 +70,41 @@ const axios = require('axios').default;
         // {"data":[{"ID Nation":"01000US","Nation":"United States","ID Year":2020,"Year":"2020","Population":326569308,"Slug Nation":"united-states"},...
         const URL_API = "https://datausa.io/api/data?drilldowns=Nation&measures=Population";
 
-        const { data } = await axios.get(URL_API);
+        const { data: { data } } = await axios.get(URL_API);
 
         await db[DATABASE_SCHEMA].api_data.insert({
-            doc_record: JSON.stringify(data),
+            doc_record: JSON.stringify(data)
         });
 
-        const result = await db[DATABASE_SCHEMA].api_data.find({
-            is_active: true
-        });
+        const result = await db[DATABASE_SCHEMA].api_data.find({},{fields: ['doc_record']});
 
         // a. em memoria no nodejs usando map, filter, for etc
-        const sumPopulation = result[0].doc_record.data.reduce((acc, curr) => {
-            if (curr.Year === "2020" || curr.Year === "2019" || curr.Year === "2018") {
-            acc += curr.Population;
+        const sumPopulation = result.map(({doc_record}) => doc_record).reduce((acc, curr) => {
+            if (curr[0].Year === "2020" || curr[0].Year === "2019" || curr[0].Year === "2018") {
+            acc += curr[0].Population;
             }
             return acc;
         }, 0);
 
+        console.log('SOMA DA POPULAÇÃO', sumPopulation);
+        //  b. usando SELECT no postgres, pode fazer um SELECT inline no nodejs.
+        const query = `SELECT SUM((doc_record[0]->>'Population')::numeric) as total_population
+                       FROM rafaelromanoz.api_data WHERE doc_record[0]->>'Year' IN ('2020', '2019', '2018')` ;
+        const populationSumFromPostgres = await db.query(query);
+
+        console.log('USANDO POSTGRES INLINE QUERY', parseInt(populationSumFromPostgres[0].total_population));
+
+
+        //c. usando SELECT no postgres, pode fazer uma VIEW no banco de dados.
+
+        const createView = `CREATE OR REPLACE VIEW viewTotalPopulation AS SELECT SUM((doc_record[0]->>'Population')::numeric) as total_population
+                       FROM rafaelromanoz.api_data WHERE doc_record[0]->>'Year' IN ('2020', '2019', '2018')` ;
+
+        await db.query(createView);
+
+        const selectedFromView = await db.query('SELECT * FROM viewTotalPopulation');
+
+        console.log('USANDO VIEW DO POSTGRES', parseInt(selectedFromView[0].total_population));
 
 
     } catch (e) {
