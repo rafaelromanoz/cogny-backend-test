@@ -1,6 +1,7 @@
 const { DATABASE_SCHEMA, DATABASE_URL, SHOW_PG_MONITOR } = require('./config');
 const massive = require('massive');
 const monitor = require('pg-monitor');
+const axios = require('axios').default;
 
 // Call start
 (async () => {
@@ -8,7 +9,7 @@ const monitor = require('pg-monitor');
 
     const db = await massive({
         connectionString: DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
+        ssl: false,
     }, {
         // Massive Configuration
         scripts: process.cwd() + '/migration',
@@ -64,18 +65,30 @@ const monitor = require('pg-monitor');
 
     try {
         await migrationUp();
+        //1. Consumir a API (https://datausa.io/api/data?drilldowns=Nation&measures=Population) e gravar o resultado na tabela "api_data" no na coluna "doc_record".
+        // Saida da API:
+        // {"data":[{"ID Nation":"01000US","Nation":"United States","ID Year":2020,"Year":"2020","Population":326569308,"Slug Nation":"united-states"},...
+        const URL_API = "https://datausa.io/api/data?drilldowns=Nation&measures=Population";
 
-        //exemplo de insert
-        const result1 = await db[DATABASE_SCHEMA].api_data.insert({
-            doc_record: { 'a': 'b' },
-        })
-        console.log('result1 >>>', result1);
+        const { data } = await axios.get(URL_API);
 
-        //exemplo select
-        const result2 = await db[DATABASE_SCHEMA].api_data.find({
+        await db[DATABASE_SCHEMA].api_data.insert({
+            doc_record: JSON.stringify(data),
+        });
+
+        const result = await db[DATABASE_SCHEMA].api_data.find({
             is_active: true
         });
-        console.log('result2 >>>', result2);
+
+        // a. em memoria no nodejs usando map, filter, for etc
+        const sumPopulation = result[0].doc_record.data.reduce((acc, curr) => {
+            if (curr.Year === "2020" || curr.Year === "2019" || curr.Year === "2018") {
+            acc += curr.Population;
+            }
+            return acc;
+        }, 0);
+
+
 
     } catch (e) {
         console.log(e.message)
