@@ -22,3 +22,8 @@ https://axios-http.com/
 Ferramentas:
 https://tableplus.com/
 Postgres: por utilizar o PG fornecido pela nuvem HEROKU a string de conexao está no arquivo .env
+
+
+Para rodar o projeto utilizar o comando:
+
+node index.js
